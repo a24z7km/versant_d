@@ -30,17 +30,42 @@ def audio_duration_estimate(text: str) -> float:
     return len(text.split()) * 0.42 + 0.8
 
 
+_NUM_TO_WORD = {
+    "0": "zero", "1": "one", "2": "two", "3": "three", "4": "four",
+    "5": "five", "6": "six", "7": "seven", "8": "eight", "9": "nine",
+    "10": "ten", "11": "eleven", "12": "twelve", "13": "thirteen",
+    "14": "fourteen", "15": "fifteen", "16": "sixteen", "17": "seventeen",
+    "18": "eighteen", "19": "nineteen", "20": "twenty", "21": "twenty-one",
+    "22": "twenty-two", "23": "twenty-three", "24": "twenty-four",
+    "25": "twenty-five", "30": "thirty", "40": "forty", "45": "forty-five",
+    "50": "fifty", "60": "sixty", "70": "seventy", "80": "eighty",
+    "90": "ninety", "100": "hundred", "1000": "thousand",
+}
+_WORD_TO_NUM = {v: k for k, v in _NUM_TO_WORD.items()}
+
+
+def _normalize(text: str) -> str:
+    words = text.lower().split()
+    out = []
+    for w in words:
+        w_clean = w.strip(".,!?")
+        out.append(_NUM_TO_WORD.get(w_clean, _WORD_TO_NUM.get(w_clean, w_clean)))
+    return " ".join(out)
+
+
 def score_answer(user_text: str, answers: list[str]) -> int:
     if not user_text.strip():
         return 0
-    user_words = set(user_text.lower().split())
+    user_norm = _normalize(user_text)
+    user_words = set(user_norm.split())
     best = 0
     for ans in answers:
-        ans_words = set(ans.lower().split())
+        ans_norm = _normalize(ans)
+        ans_words = set(ans_norm.split())
         if ans_words:
             overlap = len(user_words & ans_words) / len(ans_words)
             best = max(best, int(overlap * 100))
-        ratio = difflib.SequenceMatcher(None, ans.lower(), user_text.lower()).ratio()
+        ratio = difflib.SequenceMatcher(None, ans_norm, user_norm).ratio()
         best = max(best, int(ratio * 100))
     return best
 
@@ -423,7 +448,13 @@ elif st.session_state.phase == "q_result":
         st.success(f"**回答例:** {answers[0]}")
     with col2:
         user_t = st.session_state.user_text
-        st.error(f"**あなたの回答:** {user_t if user_t else '（認識できませんでした）'}")
+        user_display = f"**あなたの回答:** {user_t if user_t else '（認識できませんでした）'}"
+        if score > 70:
+            st.success(user_display)
+        elif score > 40:
+            st.warning(user_display)
+        else:
+            st.error(user_display)
         if st.session_state.recorded_audio:
             st.write("▶️ あなたの録音")
             st.audio(st.session_state.recorded_audio, format="audio/wav")
